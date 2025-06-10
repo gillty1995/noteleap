@@ -11,19 +11,6 @@ export default function AboutSection() {
       id="about"
       className="relative py-24 bg-gradient-to-br from-white/50 to-green-100 px-6 scroll-mt-[4rem]"
     >
-      {/* <div className="flex flex-col md:flex-row items-center md:items-start gap-12">
-        <div className="relative flex-shrink-0">
-          <Image
-            src={frogGif}
-            alt="Happy frog mascot"
-            width={40}
-            height={40}
-            className="rounded-full z-99"
-          />
-          <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-[-5] w-20 h-2 bg-green-400 rounded-full" />
-        </div>
-      </div> */}
-
       <div className="container mx-auto max-w-3xl text-center space-y-12">
         {/* Section heading */}
         <motion.h2

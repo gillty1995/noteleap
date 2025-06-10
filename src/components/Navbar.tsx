@@ -1,12 +1,18 @@
 "use client";
 
 import { useState } from "react";
+
+import SignInModal from "./SignInModal";
+import SignUpModal from "./SignUpModal";
+
 import Image from "next/image";
 import logo from "../../public/images/textlogo.png";
 
-export default function Navbar() {
-  const [open, setOpen] = useState(false);
-
+export default function Navbar({
+  onSignInClick,
+}: {
+  onSignInClick: () => void;
+}) {
   return (
     <nav className="fixed top-0 left-0 w-full bg-white z-10 shadow-md">
       <div className="max-w-8xl mx-auto flex items-center justify-between p-4 pr-10 pl-10">
@@ -36,7 +42,7 @@ export default function Navbar() {
             ))}
           </ul>
           <button
-            onClick={() => setOpen(true)}
+            onClick={onSignInClick}
             className={`
                 px-6 py-2 
                 bg-gradient-to-r from-green-100/70 to-green-200/70 

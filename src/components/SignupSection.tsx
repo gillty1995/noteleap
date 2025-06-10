@@ -1,6 +1,10 @@
 "use client";
 
-export default function SignupSection() {
+export default function SignupSection({
+  onSignUpClick,
+}: {
+  onSignUpClick: () => void;
+}) {
   return (
     <section
       id="signup"
@@ -30,9 +34,7 @@ export default function SignupSection() {
           </li>
         </ul>
         <button
-          onClick={() =>
-            document.querySelector<HTMLElement>("#signin-modal")?.click()
-          }
+          onClick={onSignUpClick}
           className="mt-4 px-20 py-3 bg-gradient-to-r from-green-200/40 to-green-300/40 backdrop-blur-sm text-green-900 roboto text-xl rounded-full shadow-lg hover:from-green-200/60 hover:to-green-300/60 transition cursor-pointer hover:shadow-2xl"
         >
           Sign Up
