@@ -46,14 +46,29 @@ export default function SignUpModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: call credentials sign in with signUp flag
-    await signIn("credentials", { email, password, signup: true });
+    // 1. Create the user
+    const resp = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, name: "" }),
+    });
+    if (!resp.ok) {
+      // show an error toast, etc.
+      return;
+    }
+
+    // 2. Immediately sign them in
+    await signIn("credentials", {
+      email,
+      password,
+      callbackUrl: "/note-ui",
+    });
   };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose}>
       <div className="max-w-sm mx-auto bg-white/90 backdrop-blur-lg p-6 rounded-2xl shadow-xl">
-        <h2 className="text-2xl font-roboto font-bold mb-4 text-center">
+        <h2 className="text-3xl tracking-widest sharetech mb-4 text-center">
           Sign Up
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -73,7 +88,7 @@ export default function SignUpModal({
           />
           <button
             type="submit"
-            className="w-full px-4 py-2 bg-green-200/40 backdrop-blur-sm text-green-900 font-bold rounded-full cursor-pointer"
+            className="w-full px-4 py-2 bg-green-200/40 backdrop-blur-sm text-green-900 sharetech text-xl rounded-full cursor-pointer hover:shadow-sm hover:text-green-600 hover:scale-102 transition ease-in-out duration-100"
           >
             Create Account
           </button>
@@ -81,8 +96,13 @@ export default function SignUpModal({
         <div className="mt-4 flex items-center justify-center space-x-2">
           <GoogleIcon className="h-6 w-6" />
           <button
-            onClick={() => signIn("auth0", { screen_hint: "signup" })}
-            className="text-green-800 font-medium cursor-pointer"
+            onClick={() =>
+              signIn("auth0", {
+                callbackUrl: "/note-ui",
+                screen_hint: "signup",
+              })
+            }
+            className="text-green-800 font-medium cursor-pointer hover:text-shadow-2xs"
           >
             Sign Up with Google
           </button>
@@ -91,7 +111,7 @@ export default function SignUpModal({
           or{" "}
           <button
             onClick={onSignIn}
-            className="text-green-700 underline cursor-pointer"
+            className="text-green-700 underline cursor-pointer hover:animate-pulse hover:text-green-900"
           >
             Sign In
           </button>

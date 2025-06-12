@@ -46,13 +46,17 @@ export default function SignInModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await signIn("credentials", { email, password });
+    await signIn("credentials", {
+      email,
+      password,
+      callbackUrl: "/note-ui",
+    });
   };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose}>
       <div className="max-w-sm mx-auto bg-white/90 backdrop-blur-lg p-6 rounded-2xl shadow-xl">
-        <h2 className="text-2xl font-roboto font-bold mb-4 text-center">
+        <h2 className="text-3xl sharetech font-bold mb-4 text-center tracking-widest">
           Sign In
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -72,7 +76,7 @@ export default function SignInModal({
           />
           <button
             type="submit"
-            className="w-full px-4 py-2 bg-green-200/40 backdrop-blur-sm text-green-900 font-bold rounded-full cursor-pointer"
+            className="w-full px-4 py-2 bg-green-200/40 backdrop-blur-sm text-green-900 sharetech text-xl rounded-full cursor-pointer hover:shadow-sm hover:text-green-600 hover:scale-102 transition ease-in-out duration-100"
           >
             Submit
           </button>
@@ -80,8 +84,10 @@ export default function SignInModal({
         <div className="mt-4 flex items-center justify-center space-x-2">
           <GoogleIcon className="h-6 w-6" />
           <button
-            onClick={() => signIn("auth0", { screen_hint: "login" })}
-            className="text-green-800 font-medium cursor-pointer"
+            onClick={() =>
+              signIn("auth0", { callbackUrl: "/note-ui", screen_hint: "login" })
+            }
+            className="text-green-800 font-medium cursor-pointer hover:text-shadow-2xs"
           >
             Continue with Google
           </button>
@@ -90,7 +96,7 @@ export default function SignInModal({
           or{" "}
           <button
             onClick={onSignUp}
-            className="text-green-700 underline cursor-pointer"
+            className="text-green-700 underline cursor-pointer hover:animate-pulse hover:text-green-800"
           >
             Sign Up
           </button>
