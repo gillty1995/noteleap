@@ -1,7 +1,9 @@
-export default function HeaderSection() {
+"use client";
+
+export default function HeaderSection({ title }: { title: string }) {
   return (
     <div className="flex items-center justify-between p-4 bg-white/90 backdrop-blur-lg rounded-2xl shadow">
-      <h2 className="text-2xl sharetech text-gray-700">Session Title</h2>
+      <h2 className="text-2xl sharetech text-gray-700">{title}</h2>
       <div className="space-x-2 text-gray-700">
         {["1", "2", "3", "4"].map((key) => (
           <button

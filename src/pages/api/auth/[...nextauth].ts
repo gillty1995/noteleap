@@ -1,5 +1,5 @@
-// [...nextauth].ts
-import NextAuth from "next-auth";
+// pages/api/auth/[...nextauth].ts
+import NextAuth, { type NextAuthOptions } from "next-auth";
 import Auth0Provider from "next-auth/providers/auth0";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
@@ -8,7 +8,7 @@ import { verifyPassword } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
-export default NextAuth({
+export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
     Auth0Provider({
@@ -41,4 +41,7 @@ export default NextAuth({
       return session;
     },
   },
-});
+  // (you can also customize pages.signIn here if you want)
+};
+
+export default NextAuth(authOptions);

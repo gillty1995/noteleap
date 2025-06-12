@@ -93,7 +93,7 @@ export default function Navbar({ onSignInClick }: NavbarProps) {
             <>
               <button
                 onClick={handleLogout}
-                className="  px-6 py-2 
+                className="px-6 py-2 
                 bg-gradient-to-r from-green-100/70 to-green-200/70 
                 text-green-800 font-semibold 
                 rounded-full 
