@@ -11,7 +11,7 @@ export default function TagSection() {
           {tag}
         </button>
       ))}
-      <small className="block text-gray-500 mt-2">click to filter by tag</small>
+      <small className="block text-gray-500 mt-2">Click to filter by tag</small>
     </div>
   );
 }

@@ -8,7 +8,6 @@ import SessionsList from "@/components/SessionsList";
 import HeaderSection from "@/components/HeaderSection";
 import FilterSearch from "@/components/FilterSearch";
 import TagSection from "@/components/TagSection";
-import NotesList from "@/components/NotesList";
 
 export default function NoteUIPage() {
   const { data: session, status } = useSession({
@@ -63,7 +62,7 @@ export default function NoteUIPage() {
     }
   };
 
-  // 3) delete a session
+  // delete a session
   const deleteSession = async (i: number) => {
     const toDelete = sessions[i];
     try {
@@ -82,7 +81,7 @@ export default function NoteUIPage() {
     }
   };
 
-  // 4) rename a session
+  // rename a session
   const renameSession = async (i: number, newName: string) => {
     const target = sessions[i];
     try {
@@ -104,8 +103,10 @@ export default function NoteUIPage() {
     }
   };
 
+  const activeSession = sessions[activeIndex];
+
   return (
-    <div className="pt-30 h-screen grid grid-cols-1 md:grid-cols-4 gap-4 p-6 bg-slate-50">
+    <div className="pt-30 min-h-screen grid grid-cols-1 md:grid-cols-4 gap-4 p-6 bg-slate-50">
       <Navbar />
       <aside className="space-y-6">
         <FilterSearch />
@@ -120,8 +121,16 @@ export default function NoteUIPage() {
         />
       </aside>
       <main className="md:col-span-3 flex flex-col gap-6">
-        <HeaderSection title={sessions[activeIndex]?.name ?? ""} />
-        <NotesList />
+        {activeSession ? (
+          <HeaderSection
+            sessionId={activeSession.id}
+            sessionName={activeSession.name}
+          />
+        ) : (
+          <p className="p-4 text-gray-500">
+            Select or create a session to get started.
+          </p>
+        )}
       </main>
     </div>
   );

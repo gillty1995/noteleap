@@ -3,7 +3,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import DeleteModal from "./DeleteModal";
-import { Plus, Minus } from "lucide-react"; // or any icons you like
+import { Plus, Minus } from "lucide-react";
 
 type SessionsListProps = {
   sessions: string[];
@@ -103,7 +103,7 @@ export default function SessionsList({
           ? ""
           : activeIndex == null
           ? "select session to delete"
-          : "click to switch sessions / double-click to rename"}
+          : "Click to switch sessions / double-click to rename"}
       </small>
 
       <DeleteModal

@@ -7,7 +7,7 @@ export default function FilterSearch() {
         className="w-full px-3 py-2 border rounded-lg focus:ring focus:outline-none text-gray-700"
       />
       <small className="text-gray-500">
-        add a search bar to filter sessions/notes
+        Search bar to filter sessions and notes
       </small>
     </div>
   );
