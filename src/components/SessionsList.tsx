@@ -60,7 +60,7 @@ export default function SessionsList({
             onClick={() => {
               if (activeIndex != null) setShowDeleteModal(true);
             }}
-            className="p-1 hover:bg-red-100 rounded text-green-600 hover:text-red-600 cursor-pointer"
+            className="p-1 hover:bg-red-100 rounded text-red-600 cursor-pointer"
             aria-label="Delete session"
           >
             <Minus size={16} />

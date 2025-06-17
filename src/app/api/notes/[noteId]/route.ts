@@ -1,4 +1,3 @@
-// src/app/api/notes/[noteId]/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth/next";
@@ -10,16 +9,11 @@ interface Params {
   params: { noteId: string };
 }
 
-/**
- * PUT /api/notes/[noteId]
- * body: { title?, content?, tags?, orderKey? }
- * → updates a note (only the owner can)
- */
 export async function PUT(
   req: Request,
   { params: { noteId } }: Params
 ) {
-  // Auth & ownership check
+  // auth
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -31,38 +25,67 @@ export async function PUT(
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  // Fetch the existing note
-  const existing = await prisma.note.findUnique({
-    where: { id: noteId },
-  });
+  // ownership
+  const existing = await prisma.note.findUnique({ where: { id: noteId } });
   if (!existing || existing.userId !== user.id) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 
-  // Apply updates
   const data = await req.json();
+
+  // enforce one key per session
+  if (
+    data.keybinding != null &&
+    data.keybinding !== existing.keybinding
+  ) {
+    const conflict = await prisma.note.findFirst({
+      where: {
+        sessionId: existing.sessionId,
+        keybinding: data.keybinding,
+      },
+    });
+    if (conflict) {
+      return NextResponse.json(
+        { error: `Key "${data.keybinding}" already in use in this session.` },
+        { status: 400 }
+      );
+    }
+  }
+
+  // apply updates
+   const updateData: any = {
+    title:     data.title    ?? existing.title,
+    content:   data.content  ?? existing.content,
+    tags:      data.tags     ?? existing.tags,
+    orderKey:  data.orderKey ?? existing.orderKey,
+  };
+
+  // If the client even sent a `keybinding` field (even if null), apply it.
+  if (Object.prototype.hasOwnProperty.call(data, "keybinding")) {
+    updateData.keybinding = data.keybinding;
+  }
+
   const updated = await prisma.note.update({
     where: { id: noteId },
-    data: {
-      title: data.title ?? existing.title,
-      content: data.content ?? existing.content,
-      tags: data.tags ?? existing.tags,
-      orderKey: data.orderKey ?? existing.orderKey,
-    },
+    data: updateData,
+    include: { session: { select: { name: true } } },
   });
 
-  return NextResponse.json(updated);
+   return NextResponse.json({
+    id:          updated.id,
+    title:       updated.title,
+    content:     updated.content,
+    tags:        updated.tags,
+    createdAt:   updated.createdAt,
+    keybinding:  updated.keybinding,
+    sessionName: updated.session.name,
+  });
 }
 
-/**
- * DELETE /api/notes/[noteId]
- * → deletes a note (only the owner can)
- */
 export async function DELETE(
   req: Request,
   { params: { noteId } }: Params
 ) {
-  // Auth & ownership check
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -73,11 +96,7 @@ export async function DELETE(
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
-
-  // Verify owner
-  const existing = await prisma.note.findUnique({
-    where: { id: noteId },
-  });
+  const existing = await prisma.note.findUnique({ where: { id: noteId } });
   if (!existing || existing.userId !== user.id) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }

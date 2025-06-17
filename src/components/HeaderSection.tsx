@@ -1,60 +1,149 @@
-// src/components/HeaderSection.tsx
 "use client";
 
-import { useState, useEffect } from "react";
-import { Plus, Minus, Tag, Keyboard } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import {
+  Plus,
+  Minus,
+  Tag as TagIcon,
+  Keyboard as KeyboardIcon,
+} from "lucide-react";
 import NoteCard, { Note } from "./NoteCard";
 import DeleteModal from "./DeleteModal";
 
 interface HeaderSectionProps {
   sessionId?: string;
   sessionName: string;
+  filterTags?: string[];
+}
+
+interface DropdownPos {
+  top: number;
+  left: number;
 }
 
 export default function HeaderSection({
   sessionId,
   sessionName,
+  filterTags = [],
 }: HeaderSectionProps) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [awaitingKeyBind, setAwaitingKeyBind] = useState(false);
-  const [showTooltip, setShowTooltip] = useState(false);
+
+  // dropdown state
+  const [showTagDropdown, setShowTagDropdown] = useState(false);
+  const [tagDropdownPos, setTagDropdownPos] = useState<DropdownPos | null>(
+    null
+  );
+  const [newTag, setNewTag] = useState("");
+  const tagButtonRef = useRef<HTMLButtonElement>(null);
+  const tags = filterTags ?? [];
+
+  // keybind dropdown state
+  const [showKeyDropdown, setShowKeyDropdown] = useState(false);
+  const [keyDropdownPos, setKeyDropdownPos] = useState<DropdownPos | null>(
+    null
+  );
+  const [newKey, setNewKey] = useState("");
+  const keyButtonRef = useRef<HTMLButtonElement>(null);
+
+  // map from pressed key to note.id
+  const [keyMap, setKeyMap] = useState<Record<string, string[]>>({});
+  const pressCount = useRef<Record<string, number>>({});
 
   // sort helper
   const sortByDateDesc = (arr: Note[]) =>
-    arr
-      .slice()
-      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    [...arr].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
-  // load & sort notes
+  // load notes
   useEffect(() => {
-    if (!sessionId) return;
-    fetch(`/api/notes?sessionId=${sessionId}`, { credentials: "include" })
+    // clear selection only on real context switch
+    setSelectedId(null);
+
+    const params = new URLSearchParams();
+    if (tags.length > 0) {
+      tags.forEach((t) => params.append("tag", t));
+    } else if (sessionId) {
+      params.append("sessionId", sessionId);
+    } else {
+      setNotes([]);
+      return;
+    }
+
+    fetch(`/api/notes?${params.toString()}`, { credentials: "include" })
       .then((r) => r.json())
       .then((data: Note[]) => {
-        const sorted = sortByDateDesc(data);
-        setNotes(sorted);
-        setSelectedId(sorted[0]?.id ?? null);
+        setNotes(sortByDateDesc(data));
       })
       .catch(console.error);
-  }, [sessionId]);
+  }, [sessionId, tags.length, tags.join(",")]);
 
-  // deselect outside click
+  useEffect(() => {
+    const km: Record<string, string[]> = {};
+    notes.forEach((n) => {
+      if (n.keybinding) {
+        km[n.keybinding] = km[n.keybinding] ?? [];
+        km[n.keybinding].push(n.id);
+      }
+    });
+    setKeyMap(km);
+    pressCount.current = {}; // reset cycle positions
+  }, [notes]);
+
+  // helper to PATCH any field (including keybinding)
+  const updateNote = async (
+    fields: Partial<Note> & { id: string }
+  ): Promise<Note> => {
+    const res = await fetch(`/api/notes/${fields.id}`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields),
+    });
+    if (!res.ok) throw new Error("Failed to update note");
+    return await res.json();
+  };
+
+  // global keydown and lookup in keyMap
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      const arr = keyMap[k];
+      if (arr?.length) {
+        e.preventDefault();
+        // how many times have we pressed this key?
+        const count = pressCount.current[k] || 0;
+        const idx = count % arr.length;
+        const noteId = arr[idx];
+        pressCount.current[k] = count + 1;
+
+        setSelectedId(noteId);
+        document
+          .getElementById(`note-${noteId}`)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [keyMap]);
+
+  // de/select on outside dblclick
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!selectedId) return;
       const el = document.getElementById(`note-${selectedId}`);
       if (el && !el.contains(e.target as Node)) {
         setSelectedId(null);
+        setShowTagDropdown(false);
+        setShowKeyDropdown(false);
       }
     };
-    // listen for dblclick instead of mousedown
     document.addEventListener("dblclick", handler);
     return () => document.removeEventListener("dblclick", handler);
   }, [selectedId]);
 
-  // create a new note
+  // CRUD handlers (add, delete, update)
   const addNote = async () => {
     if (!sessionId) return;
     const res = await fetch("/api/notes", {
@@ -63,154 +152,248 @@ export default function HeaderSection({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId, title: "New Note" }),
     });
-    if (!res.ok) {
-      console.error("Failed to create note:", await res.text());
-      return;
-    }
-    const n: Note = await res.json();
-    setNotes((prev) => sortByDateDesc([n, ...prev]));
+    if (!res.ok) return console.error(await res.text());
+    const n = (await res.json()) as Note;
+    setNotes((p) => sortByDateDesc([n, ...p]));
     setSelectedId(n.id);
   };
-
-  // delete the selected note
   const deleteNote = async () => {
     if (!selectedId) return;
     const res = await fetch(`/api/notes/${selectedId}`, {
       method: "DELETE",
       credentials: "include",
     });
-    if (!res.ok) {
-      console.error("Failed to delete note:", await res.text());
-      return;
-    }
-    setNotes((prev) => prev.filter((x) => x.id !== selectedId));
+    if (!res.ok) return console.error(await res.text());
+    setNotes((p) => p.filter((x) => x.id !== selectedId));
     setSelectedId(null);
+    window.dispatchEvent(new Event("tags-updated"));
   };
 
-  // add a tag
-  const addTag = async () => {
-    if (!selectedId) return;
-    const tag = prompt("Enter a tag:");
-    if (!tag) return;
-    const original = notes.find((x) => x.id === selectedId)!;
+  // tag ui
+  const handleTagToggle = () => {
+    if (!selectedId || !tagButtonRef.current) return;
+    const r = tagButtonRef.current.getBoundingClientRect();
+    setTagDropdownPos({
+      top: r.bottom + window.scrollY,
+      left: r.right + window.scrollX - 160,
+    });
+    setNewTag("");
+    setShowTagDropdown((v) => !v);
+    setShowKeyDropdown(false);
+  };
+  const handleTagSubmit = async () => {
+    if (!selectedId || !newTag.trim()) return;
+    const orig = notes.find((n) => n.id === selectedId)!;
     const updated = await updateNote({
-      ...original,
-      tags: [...original.tags, tag],
+      ...orig,
+      tags: [...orig.tags, newTag.trim()],
     });
-    setNotes((prev) =>
-      sortByDateDesc(prev.map((x) => (x.id === updated.id ? updated : x)))
+    setNotes((p) =>
+      sortByDateDesc(p.map((x) => (x.id === updated.id ? updated : x)))
     );
+    setShowTagDropdown(false);
+    window.dispatchEvent(new Event("tags-updated"));
   };
 
-  // update note
-  const updateNote = async (note: Note): Promise<Note> => {
-    const res = await fetch(`/api/notes/${note.id}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: note.title,
-        content: note.content,
-        tags: note.tags,
-      }),
+  // keybind ui
+  const handleKeyToggle = () => {
+    if (!selectedId || !keyButtonRef.current) return;
+    const r = keyButtonRef.current.getBoundingClientRect();
+    setKeyDropdownPos({
+      top: r.bottom + window.scrollY,
+      left: r.right + window.scrollX - 200,
     });
-    if (!res.ok) {
-      console.error("Failed to update note:", await res.text());
-      return note;
+    setNewKey("");
+    setShowKeyDropdown((v) => !v);
+    setShowTagDropdown(false);
+  };
+  const handleKeyAssign = async () => {
+    if (!selectedId || !newKey) return;
+    const k = newKey.toLowerCase();
+
+    // only enforce uniqueness if we’re in a real session
+    if (sessionId) {
+      const conflict = notes.find(
+        (n) =>
+          n.keybinding === k && n.sessionId === sessionId && n.id !== selectedId
+      );
+      if (conflict) {
+        alert(`Key "${k}" is already used in this session.`);
+        return;
+      }
     }
-    return (await res.json()) as Note;
-  };
 
-  // key-binding flow
-  const keyBind = () => {
-    if (!selectedId) return;
-    setAwaitingKeyBind(true);
-  };
-  const finishKeyBind = (id: string, key: string) => {
-    console.log(`Bound note ${id} to key ${key}`);
-    setAwaitingKeyBind(false);
-  };
-
-  // tooltip helper
-  const hoverKey = () => {
-    if (!localStorage.getItem("tooltip")) {
-      setShowTooltip(true);
-      localStorage.setItem("tooltip", "1");
-      setTimeout(() => setShowTooltip(false), 8000);
+    try {
+      // overwrite any old binding on that note
+      const updated = await updateNote({ id: selectedId, keybinding: k });
+      setNotes((prev) =>
+        sortByDateDesc(prev.map((n) => (n.id === updated.id ? updated : n)))
+      );
+    } catch (err) {
+      console.error(err);
+      alert("Failed to assign key. Please try again.");
+    } finally {
+      setShowKeyDropdown(false);
+      setNewKey("");
     }
   };
 
   return (
-    <div className="flex-1 flex flex-col gap-4 mb-7">
-      {/* header controls */}
-      <div className="flex items-center justify-between p-4 bg-white/90 backdrop-blur-lg rounded-2xl shadow">
-        <h2 className="text-2xl sharetech text-gray-700">{sessionName}</h2>
-        <div className="flex items-center space-x-2 relative">
-          <button
-            onClick={addNote}
-            className="p-1 hover:bg-green-100 rounded text-green-600"
-          >
-            <Plus size={16} />
-          </button>
-          <button
-            onClick={() => setShowDeleteModal(true)}
-            className="p-1 hover:bg-red-100 rounded text-red-600"
-          >
-            <Minus size={16} />
-          </button>
-          <button
-            onClick={addTag}
-            className="p-1 hover:bg-blue-100 rounded text-blue-600"
-          >
-            <Tag size={16} />
-          </button>
-          <div className="relative">
+    <>
+      <div className="flex-1 flex flex-col gap-4 mb-7">
+        {/* header */}
+        <div className="flex items-center justify-between p-4 bg-white/90 backdrop-blur-lg rounded-2xl shadow relative z-20">
+          <h2 className="text-2xl sharetech text-gray-700">{sessionName}</h2>
+          <div className="flex items-center space-x-2">
             <button
-              onClick={keyBind}
-              onMouseEnter={hoverKey}
-              className="p-1 hover:bg-yellow-100 rounded text-yellow-600"
+              onClick={addNote}
+              className="p-1 hover:bg-green-100 rounded text-green-600 hover:text-green-800 cursor-pointer"
             >
-              <Keyboard size={16} />
+              <Plus size={16} />
             </button>
-            {showTooltip && (
-              <div className="absolute top-full right-0 mt-2 w-48 bg-white p-2 rounded shadow text-sm z-[9999]">
-                Press then click a title to bind a key.
-              </div>
-            )}
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="p-1 hover:bg-red-100 rounded text-red-600 cursor-pointer"
+            >
+              <Minus size={16} />
+            </button>
+            <button
+              ref={tagButtonRef}
+              onClick={handleTagToggle}
+              className="p-1 hover:bg-blue-100 rounded text-blue-600 cursor-pointer"
+            >
+              <TagIcon size={16} />
+            </button>
+            <button
+              ref={keyButtonRef}
+              onClick={handleKeyToggle}
+              className="p-1 hover:bg-yellow-100 rounded text-yellow-600 cursor-pointer"
+            >
+              <KeyboardIcon size={16} />
+            </button>
           </div>
         </div>
+
+        {/* notes list */}
+        <div className="flex-1 overflow-auto space-y-4 px-4 pt-4 pb-4">
+          {notes.map((note) => {
+            const boundKey = Object.entries(keyMap).find(([k, ids]) =>
+              ids.includes(note.id)
+            )?.[0];
+            return (
+              <NoteCard
+                key={note.id}
+                note={note}
+                boundKey={boundKey}
+                onRemoveKeyBind={async () => {
+                  if (!boundKey) return;
+                  try {
+                    const updated = await updateNote({
+                      id: note.id,
+                      keybinding: null,
+                    });
+
+                    setNotes((all) =>
+                      sortByDateDesc(
+                        all.map((n) => (n.id === updated.id ? updated : n))
+                      )
+                    );
+                  } catch (err) {
+                    console.error(err);
+                    alert("Failed to remove keybind. Please try again.");
+                  }
+                }}
+                sessionName={note.sessionName}
+                isSelected={note.id === selectedId}
+                onSelect={() => setSelectedId(note.id)}
+                onDeselect={() => setSelectedId(null)}
+                onUpdate={async (n) => {
+                  const saved = await updateNote(n);
+                  setNotes((p) =>
+                    sortByDateDesc(
+                      p.map((x) => (x.id === saved.id ? saved : x))
+                    )
+                  );
+                  window.dispatchEvent(new Event("tags-updated"));
+                }}
+              />
+            );
+          })}
+        </div>
+
+        {/* delete-confirm */}
+        <DeleteModal
+          isOpen={showDeleteModal}
+          itemName={notes.find((n) => n.id === selectedId)?.title ?? ""}
+          onClose={() => setShowDeleteModal(false)}
+          onConfirm={deleteNote}
+        />
       </div>
 
-      {/* notes list */}
-      <div className="flex-1 overflow-auto space-y-4 px-4 pt-4 pb-4">
-        {notes.map((note) => (
-          <NoteCard
-            key={note.id}
-            note={note}
-            isSelected={note.id === selectedId}
-            onSelect={() => setSelectedId(note.id)}
-            onUpdate={async (n) => {
-              const saved = await updateNote(n);
-              setNotes((p) =>
-                sortByDateDesc(p.map((x) => (x.id === saved.id ? saved : x)))
-              );
+      {/* tag portal */}
+      {showTagDropdown &&
+        tagDropdownPos &&
+        createPortal(
+          <div
+            style={{
+              position: "absolute",
+              top: tagDropdownPos.top,
+              left: tagDropdownPos.left,
+              width: 160,
+              zIndex: 9999,
             }}
-            awaitingKeyBind={awaitingKeyBind}
-            onFinishKeyBind={finishKeyBind}
-            onDeselect={function (): void {
-              throw new Error("Function not implemented.");
-            }}
-          />
-        ))}
-      </div>
+            className="bg-white rounded shadow p-2"
+          >
+            <input
+              type="text"
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              placeholder="New tag…"
+              className="w-full px-2 py-1 border rounded text-sm focus:outline-none text-gray-700"
+            />
+            <button
+              onClick={handleTagSubmit}
+              disabled={!newTag.trim()}
+              className="mt-2 w-full px-2 py-1 bg-blue-200 text-green-800 disabled:text-gray-700 disabled:bg-blue-100 cursor-pointer disabled:cursor-default sharetech rounded text-sm"
+            >
+              Add Tag
+            </button>
+          </div>,
+          document.body
+        )}
 
-      {/* delete-confirm */}
-      <DeleteModal
-        isOpen={showDeleteModal}
-        itemName={notes.find((n) => n.id === selectedId)?.title ?? ""}
-        onClose={() => setShowDeleteModal(false)}
-        onConfirm={deleteNote}
-      />
-    </div>
+      {/* keybind portal */}
+      {showKeyDropdown &&
+        keyDropdownPos &&
+        createPortal(
+          <div
+            style={{
+              position: "absolute",
+              top: keyDropdownPos.top,
+              left: keyDropdownPos.left,
+              width: 200,
+              zIndex: 9999,
+            }}
+            className="bg-white rounded shadow p-2"
+          >
+            <input
+              type="text"
+              maxLength={1}
+              value={newKey}
+              onChange={(e) => setNewKey(e.target.value.slice(-1))}
+              placeholder="Assign key…"
+              className="w-full px-2 py-1 border rounded text-sm focus:outline-none text-gray-700"
+            />
+            <button
+              onClick={handleKeyAssign}
+              disabled={!newKey}
+              className="mt-2 w-full px-2 py-1 bg-yellow-200 text-green-800 disabled:bg-yellow-100 disabled:text-gray-700 disabled:cursor-default cursor-pointer rounded text-sm"
+            >
+              Assign
+            </button>
+          </div>,
+          document.body
+        )}
+    </>
   );
 }

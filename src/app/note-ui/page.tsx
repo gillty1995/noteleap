@@ -22,6 +22,7 @@ export default function NoteUIPage() {
   }
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [filterTags, setFilterTags] = useState<string[]>([]);
 
   // load sessions on mount
   useEffect(() => {
@@ -110,18 +111,28 @@ export default function NoteUIPage() {
       <Navbar />
       <aside className="space-y-6">
         <FilterSearch />
-        <TagSection />
+        <TagSection onFilterTags={setFilterTags} />
         <SessionsList
           sessions={sessions.map((s) => s.name)}
           activeIndex={activeIndex}
-          onSelect={setActiveIndex}
+          onSelect={(i) => {
+            setFilterTags([]);
+            setActiveIndex(i);
+          }}
           onAdd={addSession}
           onDelete={deleteSession}
           onRename={renameSession}
         />
       </aside>
       <main className="md:col-span-3 flex flex-col gap-6">
-        {activeSession ? (
+        {filterTags.length > 0 ? (
+          <HeaderSection
+            filterTags={filterTags}
+            sessionName={`Filter by Tag${
+              filterTags.length > 1 ? "s" : ""
+            }: ${filterTags.join(", ")}`}
+          />
+        ) : activeSession ? (
           <HeaderSection
             sessionId={activeSession.id}
             sessionName={activeSession.name}

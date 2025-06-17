@@ -5,40 +5,50 @@ import { useState, useEffect, useRef } from "react";
 import { Edit2, X } from "lucide-react";
 
 export type Note = {
+  sessionId: string;
+  sessionName: string;
   id: string;
   title: string;
   content: string;
   tags: string[];
   createdAt: string;
+  keybinding?: string | null;
 };
 
 interface NoteCardProps {
   note: Note;
+  boundKey?: string;
   isSelected: boolean;
+  sessionName: string;
   onSelect: () => void;
   onDeselect: () => void;
   onUpdate: (updated: Note) => void;
-  awaitingKeyBind: boolean;
-  onFinishKeyBind: (id: string, key: string) => void;
+  onRemoveKeyBind?: () => void;
 }
 
 export default function NoteCard({
   note,
+  boundKey,
   isSelected,
   onSelect,
   onDeselect,
+  sessionName,
   onUpdate,
-  awaitingKeyBind,
-  onFinishKeyBind,
+  onRemoveKeyBind,
 }: NoteCardProps) {
   const titleRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // edit states
+  // edit/draft states
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingContent, setEditingContent] = useState(false);
   const [draftTitle, setDraftTitle] = useState(note.title);
   const [draftContent, setDraftContent] = useState(note.content);
+
+  // keep draftTitle in sync if note.title changes externally
+  useEffect(() => {
+    setDraftTitle(note.title);
+  }, [note.title]);
 
   // autofocus
   useEffect(() => {
@@ -48,7 +58,7 @@ export default function NoteCard({
     if (editingContent) textareaRef.current?.focus();
   }, [editingContent]);
 
-  // commit handlers
+  // commit
   const commitTitle = () => {
     setEditingTitle(false);
     const t = draftTitle.trim();
@@ -60,48 +70,35 @@ export default function NoteCard({
       onUpdate({ ...note, content: draftContent });
   };
 
-  // click handlers
-  const handleCardClick = (e: React.MouseEvent) => {
+  // click/double-click to select/deselect
+  const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isSelected) onSelect();
   };
-  const handleCardDouble = (e: React.MouseEvent) => {
+  const handleDouble = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isSelected) onDeselect();
   };
-  const handleTitleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onSelect();
-    if (awaitingKeyBind) {
-      const key = prompt("Press a key now:") || "";
-      if (key) onFinishKeyBind(note.id, key);
-    }
-  };
-  const handleTitleDouble = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingTitle(true);
-  };
 
-  // format createdAt
   const formatted = new Date(note.createdAt).toLocaleString();
 
   return (
     <div
       id={`note-${note.id}`}
-      onClick={handleCardClick}
-      onDoubleClick={handleCardDouble}
+      onClick={handleClick}
+      onDoubleClick={handleDouble}
       className={`
         w-full p-4 bg-white/90 backdrop-blur-lg rounded-2xl shadow transition
         ${
           isSelected
             ? "ring-2 ring-green-400 overflow-auto resize-y max-h-[70vh]"
-            : "hover:shadow-lg overflow-hidden max-h-32"
+            : "hover:shadow-lg overflow-hidden max-h-42"
         }
       `}
       style={{ cursor: "pointer" }}
     >
-      {/* TITLE ROW */}
-      <div className="flex justify-between items-start mb-2">
+      {/* title row */}
+      <div className="flex items-center justify-between mb-2">
         {editingTitle ? (
           <input
             ref={titleRef}
@@ -113,24 +110,48 @@ export default function NoteCard({
           />
         ) : (
           <h3
-            onClick={handleTitleClick}
-            onDoubleClick={handleTitleDouble}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              setEditingTitle(true);
+            }}
             className="sharetech text-xl text-gray-700 flex-1 pr-2 select-text"
           >
-            {note.title}
+            {draftTitle}
           </h3>
         )}
-        <span className="text-xs text-gray-500 ml-2">{formatted}</span>
+        <div className="flex items-center space-x-1">
+          <span className="text-xs text-gray-400 italic">{sessionName} -</span>
+          <span className="text-xs text-gray-500">{formatted}</span>
+          {boundKey && (
+            <div className="relative group inline-flex items-center bg-gray-200 rounded px-1 text-xs">
+              <span className="pr-1 pl-1.5 text-gray-700">
+                {boundKey.toUpperCase()}
+              </span>
+              {onRemoveKeyBind && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveKeyBind();
+                  }}
+                  className="opacity-50 group-hover:opacity-100 ml-1 p-0.5 rounded-full text-gray-800 hover:scale-125 cursor-pointer"
+                  aria-label="Remove keybind"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* COLLAPSED PREVIEW */}
+      {/* collapse preview */}
       {!isSelected && (
         <p className="text-gray-700 line-clamp-2 mb-2">
           {note.content || "\u00A0"}
         </p>
       )}
 
-      {/* EXPANDED CONTENT */}
+      {/* expand content */}
       {isSelected && (
         <div className="relative mb-2 w-full min-h-[6rem]">
           {editingContent || note.content === "" ? (
@@ -155,13 +176,15 @@ export default function NoteCard({
               {note.content}
             </p>
           )}
+
+          {/* edit icon */}
           {!editingContent && note.content !== "" && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setEditingContent(true);
               }}
-              className="absolute top-2 right-2 p-1 text-gray-600 hover:text-gray-800 cursor-pointer"
+              className="absolute top-[-10] right-[-5] p-1 text-gray-500 hover:text-gray-800 transition ease-in-out delay-100 cursor-pointer"
               aria-label="Edit content"
             >
               <Edit2 size={18} />
@@ -170,16 +193,15 @@ export default function NoteCard({
         </div>
       )}
 
-      {/* TAGS */}
+      {/* tags */}
       {note.tags.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
           {note.tags.map((tag) => (
             <div
               key={tag}
-              className="relative group flex items-center bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full"
+              className="relative group bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full"
             >
               {tag}
-              {/* X button, only visible on hover */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -188,13 +210,10 @@ export default function NoteCard({
                     tags: note.tags.filter((t) => t !== tag),
                   });
                 }}
-                className="absolute -top-1 -right-1 p-1 rounded-full bg-white opacity-0 group-hover:opacity-100 transition"
+                className="absolute -top-1 -right-1 p-1 bg-white rounded-full opacity-0 group-hover:opacity-100 transition"
                 aria-label={`Remove tag ${tag}`}
               >
-                <X
-                  size={12}
-                  className="text-gray-600 hover:text-gray-800 cursor-pointer"
-                />
+                <X size={12} className="text-gray-600 cursor-pointer" />
               </button>
             </div>
           ))}
