@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 
@@ -29,7 +28,7 @@ export default function Navbar({ onSignInClick }: NavbarProps) {
   };
 
   return (
-    <nav className="fixed top-0 left-0 w-full bg-white z-10 shadow-md">
+    <nav className="fixed top-0 left-0 w-full bg-white z-50 shadow-md">
       <div className="max-w-8xl mx-auto flex items-center justify-between p-4 pr-10 pl-10">
         {/* 1. Logo on the left */}
         {session && onNoteUI ? (

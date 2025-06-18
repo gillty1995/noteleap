@@ -7,8 +7,10 @@ import {
   Minus,
   Tag as TagIcon,
   Keyboard as KeyboardIcon,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import NoteCard, { Note } from "./NoteCard";
 import DeleteModal from "./DeleteModal";
 
@@ -31,6 +33,9 @@ export default function HeaderSection({
   const [notes, setNotes] = useState<Note[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  // expanded/collapse header
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // dropdown state
   const [showTagDropdown, setShowTagDropdown] = useState(false);
@@ -76,7 +81,20 @@ export default function HeaderSection({
     fetch(`/api/notes?${params.toString()}`, { credentials: "include" })
       .then((r) => r.json())
       .then((data: Note[]) => {
-        setNotes(sortByDateDesc(data));
+        const sorted = sortByDateDesc(data);
+        setNotes(sorted);
+
+        const order: Record<string, string[]> = {};
+        sorted.forEach((n) => {
+          if (n.keybinding) {
+            order[n.keybinding] = order[n.keybinding] ?? [];
+            order[n.keybinding].push(n.id);
+          }
+        });
+        keyOrderRef.current = order;
+
+        // reset cycle counter on context change
+        pressCount.current = {};
       })
       .catch(console.error);
   }, [sessionId, tags.length, tags.join(",")]);
@@ -90,18 +108,6 @@ export default function HeaderSection({
       }
     });
     setKeyMap(km);
-  }, [notes]);
-
-  // reset pressCount only when sessionId or tags context changes
-  useEffect(() => {
-    const order: Record<string, string[]> = {};
-    notes.forEach((n) => {
-      if (n.keybinding) {
-        order[n.keybinding] = order[n.keybinding] ?? [];
-        order[n.keybinding].push(n.id);
-      }
-    });
-    keyOrderRef.current = order;
   }, [notes]);
 
   // only reset the cycle counters when “context” changes
@@ -261,7 +267,7 @@ export default function HeaderSection({
 
   return (
     <>
-      <div className="flex-1 flex flex-col gap-4 mb-7">
+      <div className="flex flex-col gap-4 mb-7">
         {/* header */}
         <div className="flex items-center justify-between p-4 bg-white/90 backdrop-blur-lg rounded-2xl shadow relative z-20">
           <h2 className="text-2xl sharetech text-gray-700">{sessionName}</h2>
@@ -292,8 +298,68 @@ export default function HeaderSection({
             >
               <KeyboardIcon size={16} />
             </button>
+            <button
+              onClick={() => setIsExpanded((v) => !v)}
+              aria-label={isExpanded ? "Collapse index" : "Expand index"}
+              className="p-1 hover:bg-gray-200 text-gray-700 rounded cursor-pointer"
+            >
+              {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+            </button>
           </div>
         </div>
+
+        <AnimatePresence initial={false} mode="popLayout">
+          {isExpanded && (
+            <motion.div
+              key="index-panel"
+              layout
+              style={{ overflow: "hidden" }}
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.25, ease: "easeInOut" }}
+              className="bg-gray-100 p-4 rounded-b-2xl mt-[-25]"
+            >
+              <motion.ul layout className="space-y-1">
+                {notes.map((n) => {
+                  const key = Object.entries(keyMap).find(([k, ids]) =>
+                    ids.includes(n.id)
+                  )?.[0];
+
+                  return (
+                    <motion.li
+                      layout
+                      key={n.id}
+                      transition={{
+                        type: "spring",
+                        stiffness: 300,
+                        damping: 25,
+                      }}
+                      onClick={() => {
+                        setSelectedId(n.id);
+                        setNotes((curr) => {
+                          const hit = curr.find((x) => x.id === n.id)!;
+                          const rest = curr.filter((x) => x.id !== n.id);
+                          return [hit, ...rest];
+                        });
+                      }}
+                      className="cursor-pointer flex items-center space-x-2 sharetech text-gray-700 px-2 py-1 hover:bg-gray-200 rounded"
+                    >
+                      {/* fixed-width, centered key */}
+                      <span className="inline-flex w-6 h-6 items-center justify-center border rounded border-gray-400/30 text-center font-mono text-sm text-gray-600">
+                        {key?.toLowerCase() ?? ""}
+                      </span>
+                      {/* title takes remaining space */}
+                      <span className="flex-1 truncate">
+                        {n.title || "(Untitled)"}
+                      </span>
+                    </motion.li>
+                  );
+                })}
+              </motion.ul>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* notes list */}
         <div className="flex-1 overflow-auto space-y-4 px-4 pt-4 pb-4">

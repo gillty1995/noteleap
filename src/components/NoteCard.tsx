@@ -125,7 +125,7 @@ export default function NoteCard({
           {boundKey && (
             <div className="relative group inline-flex items-center bg-gray-200 rounded px-1 text-xs">
               <span className="pr-1 pl-1.5 text-gray-700">
-                {boundKey.toUpperCase()}
+                {boundKey.toLowerCase()}
               </span>
               {onRemoveKeyBind && (
                 <button
