@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import Modal from "./ModalWithForm";
 
-// Placeholder Google SVG icon
+// placeholder Google SVG icon
 function GoogleIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -43,26 +44,48 @@ export default function SignUpModal({
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isOpen) {
+      setEmail("");
+      setPassword("");
+      setError(null);
+    }
+  }, [isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // 1. Create the user
+    setError(null);
+
+    // create the user
     const resp = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, name: "" }),
     });
     if (!resp.ok) {
-      // show an error toast, etc.
+      const body = await resp.json();
+      setError(body.error ?? "Failed to create account");
       return;
     }
 
-    // 2. Immediately sign them in
-    await signIn("credentials", {
+    // immediately sign them in
+    const result = await signIn("credentials", {
+      redirect: false,
       email,
       password,
-      callbackUrl: "/note-ui",
     });
+    if (result?.error) {
+      setError(result.error);
+      return;
+    }
+
+    // success — close & navigate
+    onClose();
+    router.push("/note-ui");
   };
 
   return (
@@ -71,8 +94,12 @@ export default function SignUpModal({
         <h2 className="text-3xl tracking-widest sharetech mb-4 text-center">
           Sign Up
         </h2>
+        {error && (
+          <p className="text-red-600 text-sm mb-4 text-center">{error}</p>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
+            required
             type="email"
             placeholder="Email"
             value={email}
@@ -80,6 +107,7 @@ export default function SignUpModal({
             className="w-full px-4 py-2 border rounded"
           />
           <input
+            required
             type="password"
             placeholder="Password"
             value={password}
@@ -88,9 +116,10 @@ export default function SignUpModal({
           />
           <button
             type="submit"
+            disabled={isLoading}
             className="w-full px-4 py-2 bg-green-200/40 backdrop-blur-sm text-green-900 sharetech text-xl rounded-full cursor-pointer hover:shadow-sm hover:text-green-600 hover:scale-102 transition ease-in-out duration-100"
           >
-            Create Account
+            {isLoading ? "Creating…" : "Create Account"}
           </button>
         </form>
         <div className="mt-4 flex items-center justify-center space-x-2">

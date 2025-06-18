@@ -1,25 +1,32 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
-
-const prisma = new PrismaClient();
+import { authOptions }       from "@/pages/api/auth/[...nextauth]";
+import { prisma }            from "@/lib/prisma";
 
 export async function GET(req: Request) {
+  // auth
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  const userId = session.user.id;
+
+  // parse filters
   const { searchParams } = new URL(req.url);
   const tags = searchParams.getAll("tag");
   const sessionId = searchParams.get("sessionId");
 
-  let notesWithSession;
+  // fetch only this user’s notes
+  let notesWithMeta = [];
   if (tags.length) {
-    notesWithSession = await prisma.note.findMany({
-      where: { tags: { hasSome: tags } },
+    notesWithMeta = await prisma.note.findMany({
+      where: { userId, tags: { hasSome: tags } },
       orderBy: { orderKey: "asc" },
       include: { session: { select: { id: true, name: true } } },
     });
   } else if (sessionId) {
-    notesWithSession = await prisma.note.findMany({
-      where: { sessionId },
+    notesWithMeta = await prisma.note.findMany({
+      where: { userId, sessionId },
       orderBy: { orderKey: "asc" },
       include: { session: { select: { id: true, name: true } } },
     });
@@ -27,35 +34,32 @@ export async function GET(req: Request) {
     return NextResponse.json([], { status: 200 });
   }
 
-  const notes = notesWithSession.map((n) => ({
-    id: n.id,
-    title: n.title,
-    content: n.content,
-    tags: n.tags,
-    orderKey: n.orderKey,
-    createdAt: n.createdAt,
-    sessionId: n.sessionId,
+  // shape the response
+  const notes = notesWithMeta.map((n) => ({
+    id:          n.id,
+    title:       n.title,
+    content:     n.content,
+    tags:        n.tags,
+    orderKey:    n.orderKey,
+    createdAt:   n.createdAt,
+    sessionId:   n.sessionId,
     sessionName: n.session.name,
-    keybinding: n.keybinding,
+    keybinding:  n.keybinding,
   }));
 
-  return NextResponse.json(notes, { status: 200 });
+  return NextResponse.json(notes);
 }
 
 export async function POST(req: Request) {
+  // auth
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const userId = session.user.id;
 
-  const user = await prisma.user.findUnique({
-    where: { email: session.user.email },
-  });
-  if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
-
-  const { sessionId, title, content, tags, orderKey } = await req.json();
+  // pull body
+  const { sessionId, title, content = "", tags = [], orderKey = 0 } = await req.json();
   if (!sessionId || !title) {
     return NextResponse.json(
       { error: "sessionId and title are required" },
@@ -63,16 +67,9 @@ export async function POST(req: Request) {
     );
   }
 
+  // create note scoped to this user
   const note = await prisma.note.create({
-    data: {
-      sessionId,
-      userId: user.id,
-      title,
-      content: content ?? "",
-      tags: tags ?? [],
-      orderKey: orderKey ?? 0,
-      keybinding: null,
-    },
+    data: { userId, sessionId, title, content, tags, orderKey },
   });
 
   return NextResponse.json(note, { status: 201 });

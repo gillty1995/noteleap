@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import Modal from "./ModalWithForm";
 
-// Placeholder Google SVG icon
+// placeholder Google SVG icon
 function GoogleIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -43,10 +43,21 @@ export default function SignInModal({
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    if (isOpen) {
+      setEmail("");
+      setPassword("");
+      setError(null);
+      setIsLoading(false);
+    }
+  }, [isOpen]);
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    await signIn("credentials", {
+    signIn("credentials", {
       email,
       password,
       callbackUrl: "/note-ui",
@@ -59,8 +70,12 @@ export default function SignInModal({
         <h2 className="text-3xl sharetech font-bold mb-4 text-center tracking-widest">
           Sign In
         </h2>
+        {error && (
+          <p className="text-red-600 text-sm mb-4 text-center">{error}</p>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
+            required
             type="email"
             placeholder="Email"
             value={email}
@@ -68,6 +83,7 @@ export default function SignInModal({
             className="w-full px-4 py-2 border rounded"
           />
           <input
+            required
             type="password"
             placeholder="Password"
             value={password}
@@ -75,10 +91,11 @@ export default function SignInModal({
             className="w-full px-4 py-2 border rounded"
           />
           <button
+            disabled={isLoading}
             type="submit"
             className="w-full px-4 py-2 bg-green-200/40 backdrop-blur-sm text-green-900 sharetech text-xl rounded-full cursor-pointer hover:shadow-sm hover:text-green-600 hover:scale-102 transition ease-in-out duration-100"
           >
-            Submit
+            {isLoading ? "Signing in…" : "Submit"}
           </button>
         </form>
         <div className="mt-4 flex items-center justify-center space-x-2">

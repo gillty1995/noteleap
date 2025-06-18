@@ -8,6 +8,7 @@ import {
   Tag as TagIcon,
   Keyboard as KeyboardIcon,
 } from "lucide-react";
+import { motion } from "framer-motion";
 import NoteCard, { Note } from "./NoteCard";
 import DeleteModal from "./DeleteModal";
 
@@ -50,6 +51,7 @@ export default function HeaderSection({
 
   // map from pressed key to note.id
   const [keyMap, setKeyMap] = useState<Record<string, string[]>>({});
+  const keyOrderRef = useRef<Record<string, string[]>>({});
   const pressCount = useRef<Record<string, number>>({});
 
   // sort helper
@@ -88,8 +90,24 @@ export default function HeaderSection({
       }
     });
     setKeyMap(km);
-    pressCount.current = {}; // reset cycle positions
   }, [notes]);
+
+  // reset pressCount only when sessionId or tags context changes
+  useEffect(() => {
+    const order: Record<string, string[]> = {};
+    notes.forEach((n) => {
+      if (n.keybinding) {
+        order[n.keybinding] = order[n.keybinding] ?? [];
+        order[n.keybinding].push(n.id);
+      }
+    });
+    keyOrderRef.current = order;
+  }, [notes]);
+
+  // only reset the cycle counters when “context” changes
+  useEffect(() => {
+    pressCount.current = {};
+  }, [sessionId, tags.join(",")]);
 
   // helper to PATCH any field (including keybinding)
   const updateNote = async (
@@ -109,24 +127,27 @@ export default function HeaderSection({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
-      const arr = keyMap[k];
-      if (arr?.length) {
-        e.preventDefault();
-        // how many times have we pressed this key?
-        const count = pressCount.current[k] || 0;
-        const idx = count % arr.length;
-        const noteId = arr[idx];
-        pressCount.current[k] = count + 1;
+      const arr = keyOrderRef.current[k];
+      if (!arr?.length) return;
+      e.preventDefault();
 
-        setSelectedId(noteId);
-        document
-          .getElementById(`note-${noteId}`)
-          ?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
+      // cycle through all matches
+      const count = pressCount.current[k] ?? 0;
+      const idx = count % arr.length;
+      pressCount.current[k] = count + 1;
+
+      const noteId = arr[idx];
+      setSelectedId(noteId);
+      setNotes((cur) => {
+        const hit = cur.find((n) => n.id === noteId)!;
+        const rest = cur.filter((n) => n.id !== noteId);
+        return [hit, ...rest];
+      });
     };
+
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [keyMap]);
+  }, []);
 
   // de/select on outside dblclick
   useEffect(() => {
@@ -281,42 +302,49 @@ export default function HeaderSection({
               ids.includes(note.id)
             )?.[0];
             return (
-              <NoteCard
+              <motion.div
                 key={note.id}
-                note={note}
-                boundKey={boundKey}
-                onRemoveKeyBind={async () => {
-                  if (!boundKey) return;
-                  try {
-                    const updated = await updateNote({
-                      id: note.id,
-                      keybinding: null,
-                    });
+                layout="position"
+                style={{ overflow: "visible" }}
+                transition={{ type: "tween", stiffness: 500, damping: 30 }}
+              >
+                <NoteCard
+                  key={note.id}
+                  note={note}
+                  boundKey={boundKey}
+                  onRemoveKeyBind={async () => {
+                    if (!boundKey) return;
+                    try {
+                      const updated = await updateNote({
+                        id: note.id,
+                        keybinding: null,
+                      });
 
-                    setNotes((all) =>
+                      setNotes((all) =>
+                        sortByDateDesc(
+                          all.map((n) => (n.id === updated.id ? updated : n))
+                        )
+                      );
+                    } catch (err) {
+                      console.error(err);
+                      alert("Failed to remove keybind. Please try again.");
+                    }
+                  }}
+                  sessionName={note.sessionName}
+                  isSelected={note.id === selectedId}
+                  onSelect={() => setSelectedId(note.id)}
+                  onDeselect={() => setSelectedId(null)}
+                  onUpdate={async (n) => {
+                    const saved = await updateNote(n);
+                    setNotes((p) =>
                       sortByDateDesc(
-                        all.map((n) => (n.id === updated.id ? updated : n))
+                        p.map((x) => (x.id === saved.id ? saved : x))
                       )
                     );
-                  } catch (err) {
-                    console.error(err);
-                    alert("Failed to remove keybind. Please try again.");
-                  }
-                }}
-                sessionName={note.sessionName}
-                isSelected={note.id === selectedId}
-                onSelect={() => setSelectedId(note.id)}
-                onDeselect={() => setSelectedId(null)}
-                onUpdate={async (n) => {
-                  const saved = await updateNote(n);
-                  setNotes((p) =>
-                    sortByDateDesc(
-                      p.map((x) => (x.id === saved.id ? saved : x))
-                    )
-                  );
-                  window.dispatchEvent(new Event("tags-updated"));
-                }}
-              />
+                    window.dispatchEvent(new Event("tags-updated"));
+                  }}
+                />
+              </motion.div>
             );
           })}
         </div>

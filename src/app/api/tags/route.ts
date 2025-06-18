@@ -1,13 +1,26 @@
-// src/app/api/tags/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import { prisma } from "@/lib/prisma";
 
-const prisma = new PrismaClient();
+export async function GET(req: Request) {
+  // authenticate
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  const userId = session.user.id;
 
-export async function GET() {
-  // fetch all tags arrays
-  const notes = await prisma.note.findMany({ select: { tags: true } });
-  const all = notes.flatMap((n) => n.tags);
-  const distinct = Array.from(new Set(all)).sort();
-  return NextResponse.json(distinct);
+  // only pull tags belonging to that user
+  const userNotes = await prisma.note.findMany({
+    where: { userId },
+    select: { tags: true },
+  });
+
+  // flatten + dedupe
+  const allTags = Array.from(
+    new Set(userNotes.flatMap((note) => note.tags))
+  ).sort();
+
+  return NextResponse.json(allTags);
 }

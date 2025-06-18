@@ -12,9 +12,6 @@ import TagSection from "@/components/TagSection";
 export default function NoteUIPage() {
   const { data: session, status } = useSession({
     required: true,
-    onUnauthenticated() {
-      signIn();
-    },
   });
   interface SessionItem {
     id: string;
