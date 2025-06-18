@@ -164,7 +164,7 @@ export default function NoteCard({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && e.ctrlKey) commitContent();
               }}
-              rows={4}
+              rows={20}
               className="
                 w-full pl-2 pr-12 p-2
                 border border-gray-200 rounded resize-y
