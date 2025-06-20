@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   Plus,
@@ -18,6 +18,7 @@ interface HeaderSectionProps {
   sessionId?: string;
   sessionName: string;
   filterTags?: string[];
+  filterSearch?: string;
 }
 
 interface DropdownPos {
@@ -29,8 +30,12 @@ export default function HeaderSection({
   sessionId,
   sessionName,
   filterTags = [],
+  filterSearch,
 }: HeaderSectionProps) {
+  console.log("Filter value:", filterSearch, typeof filterSearch);
+
   const [notes, setNotes] = useState<Note[]>([]);
+  const [allNotes, setAllNotes] = useState<Note[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
@@ -63,11 +68,20 @@ export default function HeaderSection({
   const sortByDateDesc = (arr: Note[]) =>
     [...arr].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
+  // This fetches all notes without session or tag filters, needed for search filter
+  useEffect(() => {
+    fetch(`/api/notes`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((data: Note[]) => {
+        setAllNotes(sortByDateDesc(data));
+      })
+      .catch(console.error);
+  }, []);
+
   // load notes
   useEffect(() => {
     // clear selection only on real context switch
     setSelectedId(null);
-
     const params = new URLSearchParams();
     if (tags.length > 0) {
       tags.forEach((t) => params.append("tag", t));
@@ -83,7 +97,7 @@ export default function HeaderSection({
       .then((data: Note[]) => {
         const sorted = sortByDateDesc(data);
         setNotes(sorted);
-
+        setAllNotes(sorted);
         const order: Record<string, string[]> = {};
         sorted.forEach((n) => {
           if (n.keybinding) {
@@ -182,6 +196,7 @@ export default function HeaderSection({
     if (!res.ok) return console.error(await res.text());
     const n = (await res.json()) as Note;
     setNotes((p) => sortByDateDesc([n, ...p]));
+    setAllNotes((p) => sortByDateDesc([n, ...p]));
     setSelectedId(n.id);
   };
   const deleteNote = async () => {
@@ -192,6 +207,7 @@ export default function HeaderSection({
     });
     if (!res.ok) return console.error(await res.text());
     setNotes((p) => p.filter((x) => x.id !== selectedId));
+    setAllNotes((p) => p.filter((x) => x.id !== selectedId));
     setSelectedId(null);
     window.dispatchEvent(new Event("tags-updated"));
   };
@@ -216,6 +232,9 @@ export default function HeaderSection({
       tags: [...orig.tags, newTag.trim()],
     });
     setNotes((p) =>
+      sortByDateDesc(p.map((x) => (x.id === updated.id ? updated : x)))
+    );
+    setAllNotes((p) => // Update allNotes as well
       sortByDateDesc(p.map((x) => (x.id === updated.id ? updated : x)))
     );
     setShowTagDropdown(false);
@@ -264,6 +283,20 @@ export default function HeaderSection({
       setNewKey("");
     }
   };
+
+  // filter notes by search
+  useEffect(() => {
+    if (!filterSearch?.trim()) {
+      setNotes(allNotes);
+    } else {
+      const search = filterSearch.toLowerCase();
+      const filtered = allNotes.filter((note) =>
+        note.title.toLowerCase().includes(search)
+      );
+      setNotes(filtered);
+    }
+  }, [filterSearch, allNotes]);
+  
 
   return (
     <>
@@ -363,6 +396,7 @@ export default function HeaderSection({
 
         {/* notes list */}
         <div className="flex-1 overflow-auto space-y-4 px-4 pt-4 pb-4">
+          
           {notes.map((note) => {
             const boundKey = Object.entries(keyMap).find(([k, ids]) =>
               ids.includes(note.id)
