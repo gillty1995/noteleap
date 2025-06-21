@@ -11,8 +11,9 @@ interface Params {
 
 export async function PUT(
   req: Request,
-  { params: { noteId } }: Params
+  { params }: { params: Promise<{ noteId: string }> }
 ) {
+  const { noteId } = await params;
   // auth
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
@@ -84,8 +85,9 @@ export async function PUT(
 
 export async function DELETE(
   req: Request,
-  { params: { noteId } }: Params
+  { params }: { params: Promise<{ noteId: string }> }
 ) {
+  const { noteId } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

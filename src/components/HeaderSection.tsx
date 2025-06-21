@@ -60,11 +60,14 @@ export default function HeaderSection({
   const [keyMap, setKeyMap] = useState<Record<string, string[]>>({});
   const keyOrderRef = useRef<Record<string, string[]>>({});
   const pressCount = useRef<Record<string, number>>({});
+  const [isAssigningKey, setIsAssigningKey] = useState(false);
 
   // sort helper
   const sortByDateDesc = useMemo(
     () => (arr: Note[]) =>
-      [...arr].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+      [...arr].sort(
+        (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)
+      ),
     []
   );
 
@@ -77,12 +80,13 @@ export default function HeaderSection({
     if (sessionId) {
       params.append("sessionId", sessionId);
     }
-    // filtered by tag(s) 
+    // filtered by tag(s)
     if (tags.length > 0) {
       tags.forEach((t) => params.append("tag", t));
     }
     // filtered by search input
-    if (filterSearch?.trim()) { // Use .trim() to ensure non-empty string
+    if (filterSearch?.trim()) {
+      // Use .trim() to ensure non-empty string
       params.append("search", filterSearch.trim()); // Append as 'search' as per backend
     }
     // get all the notes
@@ -104,7 +108,7 @@ export default function HeaderSection({
         pressCount.current = {};
       })
       .catch(console.error);
-  }, [sessionId, tags.length, tags.join(","),filterSearch, sortByDateDesc]);
+  }, [sessionId, tags.length, tags.join(","), filterSearch, sortByDateDesc]);
 
   // keybinding
   useEffect(() => {
@@ -116,6 +120,7 @@ export default function HeaderSection({
       }
     });
     setKeyMap(km);
+    keyOrderRef.current = km;
   }, [notes]);
 
   // only reset the cycle counters when “context” changes
@@ -242,6 +247,7 @@ export default function HeaderSection({
     setShowKeyDropdown((v) => !v);
     setShowTagDropdown(false);
   };
+
   const handleKeyAssign = async () => {
     if (!selectedId || !newKey) return;
     const k = newKey.toLowerCase();
@@ -260,19 +266,23 @@ export default function HeaderSection({
 
     try {
       // overwrite any old binding on that note
+      setIsAssigningKey(true);
       const updated = await updateNote({ id: selectedId, keybinding: k });
-      setNotes((prev) =>
-        sortByDateDesc(prev.map((n) => (n.id === updated.id ? updated : n)))
-      );
+      setNotes((prev) => {
+        const rest = prev.filter((n) => n.id !== updated.id);
+        return [updated, ...rest];
+      });
+      setSelectedId(updated.id);
     } catch (err) {
       console.error(err);
       alert("Failed to assign key. Please try again.");
     } finally {
+      setIsAssigningKey(false);
       setShowKeyDropdown(false);
       setNewKey("");
     }
   };
-  
+
   return (
     <>
       <div className="flex flex-col gap-4 mb-7">
@@ -371,7 +381,6 @@ export default function HeaderSection({
 
         {/* notes list */}
         <div className="flex-1 overflow-auto space-y-4 px-4 pt-4 pb-4">
-          
           {notes.map((note) => {
             const boundKey = Object.entries(keyMap).find(([k, ids]) =>
               ids.includes(note.id)
@@ -492,7 +501,7 @@ export default function HeaderSection({
               disabled={!newKey}
               className="mt-2 w-full px-2 py-1 bg-yellow-200 text-green-800 disabled:bg-yellow-100 disabled:text-gray-700 disabled:cursor-default cursor-pointer rounded text-sm"
             >
-              Assign
+              {isAssigningKey ? "Assigning…" : "Assign"}
             </button>
           </div>,
           document.body
