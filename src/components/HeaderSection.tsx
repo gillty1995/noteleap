@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   Plus,
@@ -18,6 +18,7 @@ interface HeaderSectionProps {
   sessionId?: string;
   sessionName: string;
   filterTags?: string[];
+  filterSearch?: string;
 }
 
 interface DropdownPos {
@@ -29,6 +30,7 @@ export default function HeaderSection({
   sessionId,
   sessionName,
   filterTags = [],
+  filterSearch,
 }: HeaderSectionProps) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -60,30 +62,35 @@ export default function HeaderSection({
   const pressCount = useRef<Record<string, number>>({});
 
   // sort helper
-  const sortByDateDesc = (arr: Note[]) =>
-    [...arr].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  const sortByDateDesc = useMemo(
+    () => (arr: Note[]) =>
+      [...arr].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+    []
+  );
 
-  // load notes
+  // load notes, filtered though params in beackend api file
   useEffect(() => {
     // clear selection only on real context switch
     setSelectedId(null);
-
     const params = new URLSearchParams();
+    // filtered  by session
+    if (sessionId) {
+      params.append("sessionId", sessionId);
+    }
+    // filtered by tag(s) 
     if (tags.length > 0) {
       tags.forEach((t) => params.append("tag", t));
-    } else if (sessionId) {
-      params.append("sessionId", sessionId);
-    } else {
-      setNotes([]);
-      return;
     }
-
+    // filtered by search input
+    if (filterSearch?.trim()) { // Use .trim() to ensure non-empty string
+      params.append("search", filterSearch.trim()); // Append as 'search' as per backend
+    }
+    // get all the notes
     fetch(`/api/notes?${params.toString()}`, { credentials: "include" })
       .then((r) => r.json())
       .then((data: Note[]) => {
         const sorted = sortByDateDesc(data);
         setNotes(sorted);
-
         const order: Record<string, string[]> = {};
         sorted.forEach((n) => {
           if (n.keybinding) {
@@ -97,8 +104,9 @@ export default function HeaderSection({
         pressCount.current = {};
       })
       .catch(console.error);
-  }, [sessionId, tags.length, tags.join(",")]);
+  }, [sessionId, tags.length, tags.join(","),filterSearch, sortByDateDesc]);
 
+  // keybinding
   useEffect(() => {
     const km: Record<string, string[]> = {};
     notes.forEach((n) => {
@@ -113,7 +121,7 @@ export default function HeaderSection({
   // only reset the cycle counters when “context” changes
   useEffect(() => {
     pressCount.current = {};
-  }, [sessionId, tags.join(",")]);
+  }, [sessionId, tags.join(","), filterSearch]);
 
   // helper to PATCH any field (including keybinding)
   const updateNote = async (
@@ -153,7 +161,7 @@ export default function HeaderSection({
 
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, []);
+  }, [notes]);
 
   // de/select on outside dblclick
   useEffect(() => {
@@ -264,7 +272,7 @@ export default function HeaderSection({
       setNewKey("");
     }
   };
-
+  
   return (
     <>
       <div className="flex flex-col gap-4 mb-7">
@@ -363,6 +371,7 @@ export default function HeaderSection({
 
         {/* notes list */}
         <div className="flex-1 overflow-auto space-y-4 px-4 pt-4 pb-4">
+          
           {notes.map((note) => {
             const boundKey = Object.entries(keyMap).find(([k, ids]) =>
               ids.includes(note.id)
