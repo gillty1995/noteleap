@@ -32,10 +32,7 @@ export default function HeaderSection({
   filterTags = [],
   filterSearch,
 }: HeaderSectionProps) {
-  console.log("Filter value:", filterSearch, typeof filterSearch);
-
   const [notes, setNotes] = useState<Note[]>([]);
-  const [allNotes, setAllNotes] = useState<Note[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
@@ -65,39 +62,35 @@ export default function HeaderSection({
   const pressCount = useRef<Record<string, number>>({});
 
   // sort helper
-  const sortByDateDesc = (arr: Note[]) =>
-    [...arr].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  const sortByDateDesc = useMemo(
+    () => (arr: Note[]) =>
+      [...arr].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+    []
+  );
 
-  // This fetches all notes without session or tag filters, needed for search filter
-  useEffect(() => {
-    fetch(`/api/notes`, { credentials: "include" })
-      .then((r) => r.json())
-      .then((data: Note[]) => {
-        setAllNotes(sortByDateDesc(data));
-      })
-      .catch(console.error);
-  }, []);
-
-  // load notes
+  // load notes, filtered though params in beackend api file
   useEffect(() => {
     // clear selection only on real context switch
     setSelectedId(null);
     const params = new URLSearchParams();
+    // filtered  by session
+    if (sessionId) {
+      params.append("sessionId", sessionId);
+    }
+    // filtered by tag(s) 
     if (tags.length > 0) {
       tags.forEach((t) => params.append("tag", t));
-    } else if (sessionId) {
-      params.append("sessionId", sessionId);
-    } else {
-      setNotes([]);
-      return;
     }
-
+    // filtered by search input
+    if (filterSearch?.trim()) { // Use .trim() to ensure non-empty string
+      params.append("search", filterSearch.trim()); // Append as 'search' as per backend
+    }
+    // get all the notes
     fetch(`/api/notes?${params.toString()}`, { credentials: "include" })
       .then((r) => r.json())
       .then((data: Note[]) => {
         const sorted = sortByDateDesc(data);
         setNotes(sorted);
-        setAllNotes(sorted);
         const order: Record<string, string[]> = {};
         sorted.forEach((n) => {
           if (n.keybinding) {
@@ -111,8 +104,9 @@ export default function HeaderSection({
         pressCount.current = {};
       })
       .catch(console.error);
-  }, [sessionId, tags.length, tags.join(",")]);
+  }, [sessionId, tags.length, tags.join(","),filterSearch, sortByDateDesc]);
 
+  // keybinding
   useEffect(() => {
     const km: Record<string, string[]> = {};
     notes.forEach((n) => {
@@ -127,7 +121,7 @@ export default function HeaderSection({
   // only reset the cycle counters when “context” changes
   useEffect(() => {
     pressCount.current = {};
-  }, [sessionId, tags.join(",")]);
+  }, [sessionId, tags.join(","), filterSearch]);
 
   // helper to PATCH any field (including keybinding)
   const updateNote = async (
@@ -167,7 +161,7 @@ export default function HeaderSection({
 
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, []);
+  }, [notes]);
 
   // de/select on outside dblclick
   useEffect(() => {
@@ -196,7 +190,6 @@ export default function HeaderSection({
     if (!res.ok) return console.error(await res.text());
     const n = (await res.json()) as Note;
     setNotes((p) => sortByDateDesc([n, ...p]));
-    setAllNotes((p) => sortByDateDesc([n, ...p]));
     setSelectedId(n.id);
   };
   const deleteNote = async () => {
@@ -207,7 +200,6 @@ export default function HeaderSection({
     });
     if (!res.ok) return console.error(await res.text());
     setNotes((p) => p.filter((x) => x.id !== selectedId));
-    setAllNotes((p) => p.filter((x) => x.id !== selectedId));
     setSelectedId(null);
     window.dispatchEvent(new Event("tags-updated"));
   };
@@ -232,9 +224,6 @@ export default function HeaderSection({
       tags: [...orig.tags, newTag.trim()],
     });
     setNotes((p) =>
-      sortByDateDesc(p.map((x) => (x.id === updated.id ? updated : x)))
-    );
-    setAllNotes((p) => // Update allNotes as well
       sortByDateDesc(p.map((x) => (x.id === updated.id ? updated : x)))
     );
     setShowTagDropdown(false);
@@ -283,21 +272,7 @@ export default function HeaderSection({
       setNewKey("");
     }
   };
-
-  // filter notes by search
-  useEffect(() => {
-    if (!filterSearch?.trim()) {
-      setNotes(allNotes);
-    } else {
-      const search = filterSearch.toLowerCase();
-      const filtered = allNotes.filter((note) =>
-        note.title.toLowerCase().includes(search)
-      );
-      setNotes(filtered);
-    }
-  }, [filterSearch, allNotes]);
   
-
   return (
     <>
       <div className="flex flex-col gap-4 mb-7">
